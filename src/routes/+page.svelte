@@ -663,7 +663,7 @@
             {:else if tool.id === 'weather'}
               <CloudSun class="w-3.5 h-3.5 text-amber-500" />
             {/if}
-            <span>{tool.name.split(' ')[0]}</span>
+            <span>{tool.name}</span>
           </button>
         {/each}
         <button 
