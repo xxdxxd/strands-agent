@@ -47,7 +47,7 @@
     >
       <div class="flex items-center gap-2">
         <Terminal class="w-4 h-4 text-blue-500 animate-pulse" />
-        <span>Strands Agent Core Reasoning Trail ({steps.length} {steps.length === 1 ? 'Step' : 'Steps'})</span>
+        <span>Strands Agent Demo by Dave Xia — Core Reasoning Trail ({steps.length} {steps.length === 1 ? 'Step' : 'Steps'})</span>
       </div>
       <div class="flex items-center gap-3">
         <span class="text-[10px] uppercase font-mono bg-blue-100/60 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-sm">

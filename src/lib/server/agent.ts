@@ -25,7 +25,7 @@ export function getOpenAIClient(config?: OpenAIConfig): OpenAI {
   const defaultHeaders: Record<string, string> = {};
   if (baseURL.includes('openrouter.ai')) {
     defaultHeaders['HTTP-Referer'] = process.env.APP_URL || 'https://ai.studio/build';
-    defaultHeaders['X-Title'] = 'Strands Agent';
+    defaultHeaders['X-Title'] = 'Strands Agent Demo by Dave Xia';
   }
 
   return new OpenAI({

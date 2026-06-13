@@ -99,7 +99,7 @@
           {
             id: 'welcome',
             role: 'model',
-            content: "Hello! I am a Strands Agent. I can run sequential, multi-step actions using the tools enabled on the left panel.\n\nType in questions requiring live data or computations, and you will be able to trace my thoughts and calculations in real-time!",
+            content: "Hello! I am Strands Agent Demo by Dave Xia. I can run sequential, multi-step actions using the tools enabled on the left panel.\n\nType in questions requiring live data or computations, and you will be able to trace my thoughts and calculations in real-time!",
             timestamp: Date.now()
           }
         ]
@@ -122,7 +122,6 @@
   let openAIModel = $state<string>('openai/gpt-4o-mini');
   
   // Real-time server connectivity health checker
-  let serverStatus = $state<'checking' | 'connected' | 'error'>('checking');
   let hasServerEnvKey = $state<boolean>(false);
 
   let chatScrollContainer = $state<HTMLDivElement | null>(null);
@@ -193,13 +192,10 @@
       const response = await fetch('/api/health');
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
-        serverStatus = 'connected';
         hasServerEnvKey = !!data.hasEnvKey;
-      } else {
-        serverStatus = 'error';
       }
-    } catch (err) {
-      serverStatus = 'error';
+    } catch {
+      // Health check failed; sidebar will prompt for a client-side API key.
     }
   };
 
@@ -365,31 +361,9 @@
         <Sparkles class="w-5 h-5 animate-pulse" />
       </div>
       <div>
-        <h1 class="text-md font-bold tracking-tight">Strands Agent</h1>
+        <h1 class="text-md font-bold tracking-tight">Strands Agent Demo by Dave Xia</h1>
         <p class="text-[11px] text-slate-500 dark:text-slate-400">Multi-turn tool-calling reasoning loop (SvelteKit Edition)</p>
       </div>
-    </div>
-
-    <!-- Server Indicator Status and Environment Tags -->
-    <div class="flex items-center gap-2">
-      {#if serverStatus === 'checking'}
-        <span class="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
-          <Loader class="w-3.5 h-3.5 animate-spin" />
-          Verifying link...
-        </span>
-      {:else}
-        {#if serverStatus === 'connected'}
-          <span class="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-100 dark:border-emerald-800">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            SvelteKit Orchestrator Online
-          </span>
-        {:else}
-          <span class="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-3 py-1 rounded-full border border-rose-100 dark:border-rose-800">
-            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-            Orchestrator Offline
-          </span>
-        {/if}
-      {/if}
     </div>
   </header>
 
@@ -700,15 +674,6 @@
         </button>
       </div>
 
-      <!-- Top Info Banner if API keys are basic placeholders -->
-      <div class="bg-slate-50 dark:bg-slate-950 border-b border-slate-150 dark:border-slate-850 px-6 py-2 flex items-center justify-between text-[11px] text-slate-400/80">
-        <div class="flex items-center gap-1.5 truncate">
-          <span class="font-bold uppercase bg-slate-200/65 dark:bg-slate-800 text-slate-600 px-1.5 py-0.5 rounded text-[9px]">SYSTEM</span>
-          <span class="truncate">Strands framework ensures secure local sandbox environments.</span>
-        </div>
-        <span>v1.2.0</span>
-      </div>
-
       <!-- Chat Bubble timeline -->
       <!-- svelte-ignore element_invalid_self_closing_tag -->
       <div 
@@ -740,7 +705,7 @@
                       {:else}
                         <Bot class="w-3 h-3" />
                       {/if}
-                      {isUser ? 'You' : 'Strands Agent'}
+                      {isUser ? 'You' : 'Strands Agent Demo by Dave Xia'}
                     </span>
                     <span>
                       {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -778,7 +743,7 @@
               <div class="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-850 rounded-2xl p-5 shadow-xs flex items-center gap-3">
                 <Loader class="w-4 h-4 text-blue-500 animate-spin" />
                 <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 animate-pulse">
-                  Strands Agent is reasoning... executing multi-step tools if required.
+                  Strands Agent Demo by Dave Xia is reasoning... executing multi-step tools if required.
                 </span>
               </div>
             </div>
