@@ -1,6 +1,8 @@
-# Strands Agent - Software Architecture & Setup Manual
+# Strands Agent Demo by Dave Xia — Software Architecture & Setup Manual
 
-This document details the modular full-stack architecture of the Strands Agent application, describes each component's role and data flow, and provides step-by-step instructions to run it locally on **Ubuntu Linux** and **Windows** using Docker or standalone Node.js.
+This document details the modular full-stack architecture of **Strands Agent Demo by Dave Xia**, describes each component's role and data flow, and provides step-by-step instructions to run it locally on **Ubuntu Linux** and **Windows** using Docker or standalone Node.js.
+
+The agent core uses the [**AWS Strands Agents SDK**](https://github.com/strands-agents/sdk) (`@strands-agents/sdk`) with an OpenAI-compatible model provider—not a hand-written ReAct loop.
 
 ---
 
@@ -17,20 +19,20 @@ The application is structured as an event-driven, secure full-stack SvelteKit ap
          │
          │  2. Retrieves safe environment API keys
          ▼
-  [ Strands Agent Engine (ReAct loop) ] <───┐
-         │                                  │
-         ├─► (Calculator Tool) ─────────────┤ 3. Iterative sequential 
-         │                                  │    thinking & execution 
-         ├─► (Weather API Tool) ────────────┘    loops (max 6 turns)
+  [ Strands Agents SDK (Agent + OpenAIModel) ] <───┐
+         │                                          │
+         ├─► (calculator tool) ─────────────────────┤ 3. Model-driven
+         │                                          │    stream loop
+         ├─► (weather tool) ────────────────────────┘    (max 6 turns)
          ▼
   [ Agent Output Compiled ]
          │
-         │  4. Returns Final text answer + reasoning steps JSON
+         │  4. Returns final text answer + reasoning steps JSON
          ▼
   [ Interactive Chat Timeline (UI) ]
 ```
 
-> **Note:** *ReAct* here refers to the **Reasoning and Acting** agent pattern, not the React UI framework. The frontend is Svelte 5 only.
+> **Note:** The frontend is **Svelte 5 only** (no React). Agent orchestration is delegated to the Strands SDK, which implements the model-driven reasoning-and-acting pattern internally.
 
 ---
 
@@ -38,38 +40,39 @@ The application is structured as an event-driven, secure full-stack SvelteKit ap
 
 ### 1. Frontend Client Layer (Svelte 5)
 * **`src/routes/+page.svelte` (Main View)**: 
-  * Implements the single-view chat container styled with Tailwind CSS utility classes and `lucide-svelte` iconography.
+  * Implements the single-view chat container styled with Tailwind CSS utility classes and direct `lucide-svelte/icons/*` imports (avoids ad-blocker issues with barrel imports).
   * Manages state reactively using Svelte 5 Runes:
     * `$state`: Holds interactive session configurations, current active session, prompt inputs, enabled tools, error indicators, and diagnostics.
     * `$derived`: Calculates computed helper variables (e.g., getting the active session object out of history lists).
     * `$effect`: Synchronizes settings and chat histories transparently back to the browser’s `localStorage` context.
 * **`src/lib/components/ReasoningView.svelte` (Visual Thought Trace)**:
   * A component that handles collapsible accordion layouts for agent reasoning logs.
-  * It translates the dynamic JSON list of thoughts, parameter inputs, live API replies, and execution exceptions into human-friendly timeline visual steps.
+  * It translates the dynamic JSON list of Strands stream events—model turns, tool parameters, live API replies, and execution exceptions—into human-friendly timeline visual steps.
 
 ### 2. Secure Backend API Layer (SvelteKit Routes)
 To guarantee API key safety, no model endpoints are hit directly from the client. SvelteKit routes proxy the work:
-* **`src/routes/api/chat/+server.ts`**: This endpoint intercepts POST request payloads. It receives user prompts, isolates security keys, initializes server-side frameworks, and offloads processing tasks to the core agent loop.
+* **`src/routes/api/chat/+server.ts`**: This endpoint intercepts POST request payloads. It receives user prompts, isolates security keys, and delegates processing to `runAgentLoop()` in the Strands orchestration core.
 * **`src/routes/api/health/+server.ts`**: A secondary endpoint that queries whether standard server keys (`OPENAI_API_KEY`) reside in the host environment. This allows the client interface to display dynamic connection badges in real time.
 
-### 3. Orchestration & Reasoning Core (The Strands Agent)
+### 3. Orchestration & Reasoning Core (Strands Agents SDK)
 * **`src/lib/server/agent.ts`**:
-  * Implements the **ReAct (Reasoning and Acting)** cycle.
-  * Translates natural language prompts into systematic instructions, using customized JSON tools-schema (Function declarations) depending on what the user enabled in the panel.
-  * Runs an iterative maximum 6-turn loop using the OpenAI-compatible SDK:
-    1. Sends context history + tools schema definitions to the LLM.
-    2. Inspects if the model returns static thoughts or demands active tool execution.
-    3. If the model issues a tool call, the agent pauses, executes the respective TypeScript function, formats the reply block, and injects the output back into the message history array.
-    4. Repeats until the model arrives at a grounded final text solution.
+  * Creates a Strands `Agent` with `OpenAIModel` (OpenAI-compatible chat API), a system prompt, prior chat history, and enabled tools.
+  * Calls `agent.stream(message)` and maps Strands stream events (`beforeModelCallEvent`, `modelMessageEvent`, `beforeToolCallEvent`, `afterToolCallEvent`, etc.) into the UI-facing `ReasoningStep[]` timeline.
+  * Enforces `limits: { turns: 6 }` and resolves API credentials from the request config or server environment (`OPENAI_API_KEY`, `OPENAI_BASE_URL`).
+* **`src/lib/server/strands-tools.ts`**:
+  * Declares Strands tools with `tool()` and **Zod** input schemas.
+  * Exposes `calculator` and `weather` tools; `buildStrandsTools()` filters them based on the user's enabled-tool toggles.
 
-### 4. Server-Side Extensible Toolbelt (`src/lib/server/tools.ts`)
+### 4. Server-Side Tool Implementations (`src/lib/server/tools.ts`)
 * **Safe Mathematical Expression Parser (`evaluateMath`)**: Builds a stable mathematical tokenizer and recursive-descent parser. Computes intricate arithmetic expressions including parenthesis clusters, fractions, and exponential symbols (`^`) safely without using vulnerable Javascript compilation blocks (`eval` or `new Function`).
 * **Open-Meteo Weather Integration (`fetchWeather`)**: A zero-key city weather system. It sequentially pings Open-Meteo's Geocoding API to pinpoint geographic coordinates (latitude and longitude) for any input term, then queries local sensor predictions to yield winds, current temperatures, and conditions.
 
 ### 5. Build & Runtime Tooling
-* **`vite.config.ts`**: Uses `@sveltejs/kit/vite` and Tailwind CSS. Dev server defaults to port `3000`.
+* **`vite.config.ts`**: Uses `@sveltejs/kit/vite` and Tailwind CSS. Dev server defaults to port `3000`. Marks `@strands-agents/sdk` as SSR-external and excludes `lucide-svelte` from dependency pre-bundling.
 * **`svelte.config.js`**: Uses `@sveltejs/adapter-node` and writes production output to `build/`.
-* **`Dockerfile`**: Builds on Ubuntu 22.04, installs Node.js 20, runs `npm ci`, compiles the app, and starts `node build/index.js` on port `3000`.
+* **`.npmrc`**: Sets `legacy-peer-deps=true` so `@strands-agents/sdk` installs cleanly with its optional peer dependencies.
+* **`Dockerfile`**: Builds on Ubuntu 22.04, installs Node.js 20, runs `npm ci` (honours `.npmrc`), compiles the app, and starts `node build/index.js` on port `3000`.
+* **`static/favicon.svg`** + **`src/routes/favicon.ico/+server.ts`**: Serves and redirects favicon requests.
 
 ---
 
@@ -113,7 +116,7 @@ docker build -t strands-agent .
 The image:
 - Uses Ubuntu 22.04 as the base image
 - Installs Node.js 20 from NodeSource
-- Runs `npm ci` for reproducible dependency installation
+- Runs `npm ci` (reads `.npmrc` for Strands SDK peer-dependency resolution)
 - Compiles the SvelteKit production bundle with `npm run build`
 - Starts the Node adapter server with `node build/index.js`
 
@@ -163,6 +166,8 @@ npm -v
 cd /path/to/strandsAgentDemo-main
 npm install
 ```
+
+> **Note:** Root `.npmrc` enables `legacy-peer-deps` for `@strands-agents/sdk`.
 
 #### Step 2: Setup Environment Values
 ```bash
@@ -252,6 +257,8 @@ Open your project folder inside CMD, PowerShell, or bash, and run:
 ```bash
 npm install
 ```
+
+> **Note:** Root `.npmrc` enables `legacy-peer-deps` for `@strands-agents/sdk`.
 
 #### Step 2: Setup Environment Values
 1. Copy the `.env.example` file and rename the copy to `.env` in the root folder.

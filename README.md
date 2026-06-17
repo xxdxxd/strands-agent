@@ -1,6 +1,8 @@
-# Strands Agent (SvelteKit Edition)
+# Strands Agent Demo by Dave Xia
 
-An interactive SvelteKit application utilizing the Strands Agent Framework to execute multi-step tool calls for math computations and live weather searches. Built with Svelte 5, styled with Tailwind CSS, and optimized for secure, responsive server-side processing.
+An interactive **SvelteKit** demo powered by the [**AWS Strands Agents SDK**](https://github.com/strands-agents/sdk) (`@strands-agents/sdk`). The app runs a model-driven, multi-step agent loop with calculator and live weather tools. Built with Svelte 5, styled with Tailwind CSS, and optimized for secure server-side processing.
+
+**Repository:** [github.com/xxdxxd/strands-agent](https://github.com/xxdxxd/strands-agent)
 
 ---
 
@@ -9,7 +11,7 @@ An interactive SvelteKit application utilizing the Strands Agent Framework to ex
 Use an environment file or container environment variables rather than hardcoding credentials in the UI or source code. This keeps API keys out of the client bundle and version control.
 
 ### Config File
-The application reads `OPENAI_API_KEY` and `OPENAI_BASE_URL` from the server environment. In local development, SvelteKit loads these from a root `.env` file.
+The application reads `OPENAI_API_KEY` and `OPENAI_BASE_URL` from the server environment. In local development and production (`npm run start`), the server loads a root `.env` file automatically via the `dotenv` package (see `src/lib/server/env.ts` and `src/hooks.server.ts`).
 
 1. Locate the `.env.example` template in the root directory.
 2. Duplicate it and rename it to `.env`:
@@ -64,6 +66,8 @@ cd /path/to/strandsAgentDemo-main
 ```bash
 npm install
 ```
+
+> **Note:** The project includes a root `.npmrc` with `legacy-peer-deps=true` so `@strands-agents/sdk` installs cleanly alongside its optional peer dependencies.
 
 ### 4. Configure Environment Variables
 
@@ -191,11 +195,14 @@ docker run -d \
 
 ---
 
-## 🛠️ Diagnostics & Features Overview
+## 🛠️ Features Overview
 
-* **SvelteKit Server Routes**: All model calls are handled inside `/src/routes/api/*` routes, isolated server-side so API keys are never exposed to the browser.
-* **Svelte 5 Runes**: Uses `$state`, `$derived`, and `$effect` for reactive UI updates and chat session persistence.
-* **Git Leak Protection**: `.gitignore` excludes `.env` files from commits.
+* **Strands Agents SDK**: Server-side orchestration in `src/lib/server/agent.ts` uses `Agent`, `OpenAIModel`, and `agent.stream()` with a 6-turn limit. Tools are declared in `src/lib/server/strands-tools.ts` via Strands `tool()` + Zod schemas.
+* **OpenAI-compatible models**: Works with OpenRouter or any OpenAI-compatible API (`OPENAI_BASE_URL`, `OPENAI_API_KEY`).
+* **SvelteKit server routes**: All model calls run inside `/src/routes/api/*` so API keys never reach the browser.
+* **Reasoning trail UI**: The chat timeline renders streamed Strands events (model turns, tool calls, tool output, errors) in `ReasoningView.svelte`.
+* **Svelte 5 runes**: Uses `$state`, `$derived`, and `$effect` for reactive UI updates and chat session persistence in `localStorage`.
+* **Git leak protection**: `.gitignore` excludes `.env` files from commits.
 
 ---
 

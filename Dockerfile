@@ -25,7 +25,7 @@ WORKDIR /usr/src/app
 # Copy manifest files to execute cached package installations
 COPY package*.json ./
 
-# Clean installation of npm dependencies 
+# Clean installation of npm dependencies (@strands-agents/sdk peer deps; see .npmrc)
 RUN npm ci
 
 # Copy the remaining codebase files across to the volume

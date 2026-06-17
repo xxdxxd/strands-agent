@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite dev --host 0.0.0.0 --port 3000",
+    "dev": "vite dev --host 0.0.0.0",
     "build": "vite build",
     "start": "node build",
     "clean": "rm -rf build .svelte-kit",
@@ -26,7 +26,6 @@
     "lucide-svelte": "^1.0.1",
     "openai": "^6.42.0",
     "svelte": "^5.56.3",
-    "vite": "^8.0.16",
     "zod": "^4.4.3"
   },
   "devDependencies": {
