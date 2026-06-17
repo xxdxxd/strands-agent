@@ -1,15 +1,13 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import type { ReasoningStep } from '$lib/types';
-  import { 
-    Brain, 
-    Terminal, 
-    Database, 
-    AlertTriangle, 
-    ChevronDown, 
-    ChevronRight, 
-    Clock 
-  } from 'lucide-svelte';
+  import Brain from 'lucide-svelte/icons/brain';
+  import Terminal from 'lucide-svelte/icons/terminal';
+  import Database from 'lucide-svelte/icons/database';
+  import AlertTriangle from 'lucide-svelte/icons/alert-triangle';
+  import ChevronDown from 'lucide-svelte/icons/chevron-down';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import Clock from 'lucide-svelte/icons/clock';
 
   interface Props {
     steps: ReasoningStep[];

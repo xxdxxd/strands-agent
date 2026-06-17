@@ -5,27 +5,25 @@
   import type { ChatSession, Message, ToolType, ToolDefinition, ReasoningStep } from '$lib/types';
   import ReasoningView from '$lib/components/ReasoningView.svelte';
 
-  import { 
-    Bot, 
-    User, 
-    Send, 
-    Sparkles, 
-    Calculator, 
-    CloudSun, 
-    Settings, 
-    Check, 
-    RotateCcw, 
-    HelpCircle,
-    AlertCircle,
-    Loader,
-    ChevronRight,
-    Sliders,
-    Eye,
-    EyeOff,
-    ShieldCheck,
-    ShieldAlert,
-    Trash2
-  } from 'lucide-svelte';
+  import Bot from 'lucide-svelte/icons/bot';
+  import User from 'lucide-svelte/icons/user';
+  import Send from 'lucide-svelte/icons/send';
+  import Sparkles from 'lucide-svelte/icons/sparkles';
+  import Calculator from 'lucide-svelte/icons/calculator';
+  import CloudSun from 'lucide-svelte/icons/cloud-sun';
+  import Settings from 'lucide-svelte/icons/settings';
+  import Check from 'lucide-svelte/icons/check';
+  import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
+  import HelpCircle from 'lucide-svelte/icons/help-circle';
+  import AlertCircle from 'lucide-svelte/icons/alert-circle';
+  import Loader from 'lucide-svelte/icons/loader';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import Sliders from 'lucide-svelte/icons/sliders';
+  import Eye from 'lucide-svelte/icons/eye';
+  import EyeOff from 'lucide-svelte/icons/eye-off';
+  import ShieldCheck from 'lucide-svelte/icons/shield-check';
+  import ShieldAlert from 'lucide-svelte/icons/shield-alert';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
 
   const AVAILABLE_TOOLS: ToolDefinition[] = [
     {

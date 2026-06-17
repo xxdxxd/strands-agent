@@ -11,7 +11,7 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Message content cannot be blank' }, { status: 400 });
     }
 
-    // Run our agentic reasoning loop using OpenAI
+    // Run the Strands Agents SDK loop
     const result = await runAgentLoop(message, history || [], enabledTools || [], openAIConfig);
     
     return json(result);

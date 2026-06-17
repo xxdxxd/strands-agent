@@ -1,320 +1,281 @@
 /**
- * Strands Agent Framework - OpenAI SDK Multi-step Reasoning Client Core (SvelteKit server-only)
+ * Strands Agents SDK orchestration core (SvelteKit server-only).
  */
 
-import OpenAI from 'openai';
-import type { Message, ReasoningStep, ToolType, OpenAIConfig } from '$lib/types';
-import { evaluateMath, fetchWeather } from './tools';
+import {
+  Agent,
+  Message,
+  TextBlock,
+  type AgentResult,
+  type AgentStreamEvent,
+  type ToolResultBlock,
+} from '@strands-agents/sdk';
+import { OpenAIModel } from '@strands-agents/sdk/models/openai';
+import type { Message as ChatMessage, ReasoningStep, ToolType, OpenAIConfig } from '$lib/types';
+import { buildStrandsTools } from './strands-tools';
 
-// Generate a random UUID-like ID for logs
+const SYSTEM_PROMPT =
+  'You are a highly analytical, autonomous AI specialist powered by the AWS Strands Agents SDK. ' +
+  'Your goal is to answer the user thoroughly and factually. ' +
+  'You may execute tools in a sequential, multi-step manner when needed. ' +
+  'Think step-by-step before calling tools, examine tool results carefully, and loop until you have a grounded final answer. ' +
+  'If a tool fails, explain the issue and attempt a reasonable fallback. Do not hallucinate facts.';
+
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-/**
- * Initializes the OpenAI Client dynamically based on context config or standard server env keys
- */
-export function getOpenAIClient(config?: OpenAIConfig): OpenAI {
+function resolveApiKey(config?: OpenAIConfig): string {
   const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
   if (!apiKey || apiKey === 'MY_OPENAI_API_KEY' || apiKey === 'your_actual_api_key' || apiKey.trim() === '') {
-    throw new Error('OPENAI_API_KEY is not configured on the node server or in conversation settings. Please provide your API key in the configuration sidebar.');
+    throw new Error(
+      'No valid OPENAI_API_KEY was provided. Please configure your API key in the settings panel or in the server environment.'
+    );
   }
+  return apiKey;
+}
 
+function createStrandsModel(config?: OpenAIConfig): OpenAIModel {
+  const apiKey = resolveApiKey(config);
   const baseURL = config?.baseURL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+  const modelId = config?.model || 'openai/gpt-4o-mini';
 
   const defaultHeaders: Record<string, string> = {};
   if (baseURL.includes('openrouter.ai')) {
-    defaultHeaders['HTTP-Referer'] = process.env.APP_URL || 'https://ai.studio/build';
+    defaultHeaders['HTTP-Referer'] = process.env.APP_URL || 'https://github.com/xxdxxd/strands-agent';
     defaultHeaders['X-Title'] = 'Strands Agent Demo by Dave Xia';
   }
 
-  return new OpenAI({
+  return new OpenAIModel({
+    api: 'chat',
+    modelId,
+    temperature: 0.15,
     apiKey,
-    baseURL,
-    defaultHeaders,
+    clientConfig: {
+      baseURL,
+      defaultHeaders,
+    },
   });
 }
 
-// Defining OpenAI Tools Schema Configurations
-const calculatorToolSchema = {
-  type: 'function' as const,
-  function: {
-    name: 'calculator',
-    description: 'Calculates basic mathematical expressions. Supports operands +, -, *, /, brackets and exponents (^). Strictly enter expression string only.',
-    parameters: {
-      type: 'object',
-      properties: {
-        expression: {
-          type: 'string',
-          description: 'Mathematical expression to compute, e.g. "3.5 * (12 + 45)" or "2^4"'
-        }
-      },
-      required: ['expression']
-    }
+function toStrandsHistory(history: ChatMessage[]): Message[] {
+  return history.map(
+    (item) =>
+      new Message({
+        role: item.role === 'user' ? 'user' : 'assistant',
+        content: [new TextBlock(item.content)],
+      })
+  );
+}
+
+function extractMessageText(message: Message): string {
+  return message.content
+    .filter((block) => block.type === 'textBlock')
+    .map((block) => block.text)
+    .join('\n')
+    .trim();
+}
+
+function formatToolResult(result: ToolResultBlock): string {
+  const parts = result.content.map((block) => {
+    if (block.type === 'textBlock') return block.text;
+    if (block.type === 'jsonBlock') return JSON.stringify(block.json, null, 2);
+    return JSON.stringify(block, null, 2);
+  });
+
+  if (parts.length > 0) {
+    return parts.join('\n');
   }
+
+  if (result.error) {
+    return result.error.message;
+  }
+
+  return JSON.stringify({ toolUseId: result.toolUseId, status: result.status }, null, 2);
+}
+
+type StreamContext = {
+  turn: number;
+  modelCallStart?: number;
+  toolStarts: Map<string, number>;
+  toolNames: Map<string, string>;
 };
 
-const weatherToolSchema = {
-  type: 'function' as const,
-  function: {
-    name: 'weather',
-    description: 'Retrieves coordinate locations and current Fahrenheit/Celsius temperatures for any worldwide city.',
-    parameters: {
-      type: 'object',
-      properties: {
-        city: {
-          type: 'string',
-          description: 'Name of the city, e.g. "Seattle" or "Berlin"'
-        }
-      },
-      required: ['city']
-    }
-  }
-};
+function mapStreamEvent(event: AgentStreamEvent, steps: ReasoningStep[], ctx: StreamContext): void {
+  switch (event.type) {
+    case 'beforeModelCallEvent':
+      ctx.turn += 1;
+      ctx.modelCallStart = Date.now();
+      steps.push({
+        id: generateId(),
+        timestamp: Date.now(),
+        type: 'thought',
+        title: `Strands agent loop - Turn ${ctx.turn}`,
+        details: 'Running the Strands Agents SDK model-driven reasoning loop.',
+      });
+      break;
 
-/**
- * Executes a specific tool by name and arguments
- */
-async function runTool(name: string, args: any): Promise<any> {
-  switch (name) {
-    case 'calculator': {
-      const expr = args.expression;
-      if (!expr) throw new Error('Parameter "expression" is required for calculator');
-      return evaluateMath(expr);
+    case 'modelMessageEvent': {
+      const text = extractMessageText(event.message);
+      if (text) {
+        steps.push({
+          id: generateId(),
+          timestamp: Date.now(),
+          type: 'thought',
+          title: `Model response (Turn ${ctx.turn})`,
+          details: text,
+          elapsedMs: ctx.modelCallStart ? Date.now() - ctx.modelCallStart : undefined,
+        });
+      }
+      break;
     }
-    case 'weather': {
-      const city = args.city;
-      if (!city) throw new Error('Parameter "city" is required for weather');
-      return await fetchWeather(city);
+
+    case 'beforeToolCallEvent':
+      ctx.toolStarts.set(event.toolUse.toolUseId, Date.now());
+      ctx.toolNames.set(event.toolUse.toolUseId, event.toolUse.name);
+      steps.push({
+        id: generateId(),
+        timestamp: Date.now(),
+        type: 'tool_call',
+        title: `Executing tool: ${event.toolUse.name}`,
+        details: `Parameters:\n${JSON.stringify(event.toolUse.input, null, 2)}`,
+        toolName: event.toolUse.name,
+      });
+      break;
+
+    case 'afterToolCallEvent': {
+      const startedAt = ctx.toolStarts.get(event.toolUse.toolUseId);
+      const elapsedMs = startedAt ? Date.now() - startedAt : undefined;
+
+      if (event.error || event.result.status === 'error') {
+        steps.push({
+          id: generateId(),
+          timestamp: Date.now(),
+          type: 'error',
+          title: `Tool failure: ${event.toolUse.name}`,
+          details: event.error?.message || formatToolResult(event.result),
+          toolName: event.toolUse.name,
+          elapsedMs,
+        });
+        break;
+      }
+
+      steps.push({
+        id: generateId(),
+        timestamp: Date.now(),
+        type: 'tool_response',
+        title: `Tool output: ${event.toolUse.name}`,
+        details: formatToolResult(event.result),
+        toolName: event.toolUse.name,
+        elapsedMs,
+      });
+      break;
     }
-    default:
-      throw new Error(`Unknown tool: "${name}"`);
+
+    case 'afterModelCallEvent':
+      if (event.error) {
+        steps.push({
+          id: generateId(),
+          timestamp: Date.now(),
+          type: 'error',
+          title: 'Model call failed',
+          details: event.error.message,
+        });
+      }
+      break;
   }
 }
 
-/**
- * Runs the Multi-step Strands Agent OpenAI Loop
- */
-export async function runAgentLoop(
+async function runStrandsAgent(
   message: string,
-  history: Message[],
+  history: ChatMessage[],
   enabledTools: ToolType[],
   openAIConfig?: OpenAIConfig
 ): Promise<{ answer: string; reasoningSteps: ReasoningStep[] }> {
-  const apiKey = openAIConfig?.apiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey === 'MY_OPENAI_API_KEY' || apiKey === 'your_actual_api_key' || apiKey.trim() === '') {
-    throw new Error('No valid OPENAI_API_KEY was provided. Please configure your OpenAI API Key in the settings panel on the left to start conversation.');
-  }
-
   const reasoningSteps: ReasoningStep[] = [];
   const startTimer = Date.now();
-
-  // Pick suitable model
   const activeModel = openAIConfig?.model || 'openai/gpt-4o-mini';
+  const baseURL = openAIConfig?.baseURL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
 
-  // Log initial Request Setup
   reasoningSteps.push({
     id: generateId(),
     timestamp: Date.now(),
     type: 'thought',
-    title: 'Input Analysis (OpenRouter Model Mode)',
-    details: `Initializing chat query with target model "${activeModel}" and tools: [${enabledTools.join(', ') || 'none'}]. Analyzing prompt context and conversation history.`
+    title: 'Strands Agents SDK initialization',
+    details: `Starting Strands agent with model "${activeModel}", base URL "${baseURL}", and tools: [${enabledTools.join(', ') || 'none'}].`,
   });
 
-  // Client init
-  let openai: OpenAI;
-  try {
-    openai = getOpenAIClient(openAIConfig);
-  } catch (err: any) {
-    reasoningSteps.push({
-      id: generateId(),
-      timestamp: Date.now(),
-      type: 'error',
-      title: 'Failed to initialize OpenAI Client',
-      details: err.message || String(err),
-    });
-    throw err;
-  }
-
-  // Pick up tool schemas mapping to enabled selections
-  const tools: Array<{ type: 'function'; function: any }> = [];
-  if (enabledTools.includes('calculator')) tools.push(calculatorToolSchema);
-  if (enabledTools.includes('weather')) tools.push(weatherToolSchema);
-
-  // System instructions explaining agent goals & systematic guidelines
-  const systemInstruction = 
-    `You are a highly analytical, autonomous AI specialist utilizing the Strands Agent Framework, powered by OpenAI models. ` +
-    `Your prompt is to answer the user's inquiry thoroughly and factually. ` +
-    `You have permissions to execute tool calls on behalf of the user in a sequential, multi-step manner. ` +
-    `When analyzing a question, list your thoughts, choose appropriate tools, process and examine their results, and loop until you have a final fully-grounded answer. ` +
-    `Before calling any tool, you are encouraged to think step-by-step and write down your reasoning explanation. ` +
-    `If you do not need any further tools or if you have collected sufficient data, write down the final concise solution. ` +
-    `Do not hallucinate facts. If a tool fails, explain the problem and think of a fallback or inform the user.`;
-
-  // Build OpenAI input message history list
-  const messages: any[] = [
-    {
-      role: 'system',
-      content: systemInstruction
-    }
-  ];
-
-  // Convert past conversations to OpenAI messages format
-  for (const item of history) {
-    messages.push({
-      role: item.role === 'user' ? 'user' : 'assistant',
-      content: item.content
-    });
-  }
-
-  // Add the newly input prompt
-  messages.push({
-    role: 'user',
-    content: message
+  const agent = new Agent({
+    model: createStrandsModel(openAIConfig),
+    tools: buildStrandsTools(enabledTools),
+    systemPrompt: SYSTEM_PROMPT,
+    messages: toStrandsHistory(history),
+    printer: false,
+    limits: { turns: 6 },
   });
 
-  let loopCount = 0;
-  const maxLoops = 6; // Safety ceiling
-  let finalAnswer = '';
+  const ctx: StreamContext = {
+    turn: 0,
+    toolStarts: new Map(),
+    toolNames: new Map(),
+  };
 
-  while (loopCount < maxLoops) {
-    loopCount++;
-    const stepStart = Date.now();
+  const stream = agent.stream(message);
+  let result: AgentResult | undefined;
 
-    reasoningSteps.push({
-      id: generateId(),
-      timestamp: Date.now(),
-      type: 'thought',
-      title: `Agent reasoning loop - Turn ${loopCount}`,
-      details: `Streaming prompt to OpenRouter/OpenAI (${activeModel}) via base URL: ${openAIConfig?.baseURL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1'}. Formulating system calculations or webpage contexts.`
-    });
-
-    // Fire ChatGPT completion call with tool definitions
-    const completion = await openai.chat.completions.create({
-      model: activeModel,
-      messages: messages,
-      tools: tools.length > 0 ? tools : undefined,
-      temperature: 0.15,
-    });
-
-    const choice = completion.choices?.[0];
-    if (!choice) {
-      throw new Error('No completion content candidates returned from OpenAI.');
+  while (true) {
+    const next = await stream.next();
+    if (next.done) {
+      result = next.value;
+      break;
     }
+    mapStreamEvent(next.value, reasoningSteps, ctx);
+  }
 
-    const assistantMsg = choice.message;
-    
-    // Append assistant's thoughts to our conversation state block
-    messages.push(assistantMsg);
+  if (!result) {
+    throw new Error('Strands agent finished without returning a result.');
+  }
 
-    const modelThoughts = assistantMsg.content || '';
-    if (modelThoughts) {
+  let finalAnswer = extractMessageText(result.lastMessage);
+
+  if (!finalAnswer) {
+    if (result.stopReason === 'limitTurns') {
+      finalAnswer = 'The Strands agent reached the maximum number of reasoning turns before producing a final answer.';
       reasoningSteps.push({
         id: generateId(),
         timestamp: Date.now(),
         type: 'thought',
-        title: `Model Thoughts (Turn ${loopCount})`,
-        details: modelThoughts,
-        elapsedMs: Date.now() - stepStart
+        title: 'Turn limit reached',
+        details: 'The Strands Agents SDK stopped after the configured turn limit.',
       });
-    }
-
-    // Inspect if the model requested function tool execution
-    const toolCalls = assistantMsg.tool_calls;
-
-    if (toolCalls && toolCalls.length > 0) {
-      for (const call of toolCalls) {
-        const toolCallId = generateId();
-        const callStart = Date.now();
-        const functionName = (call as any).function.name;
-        
-        let toolArguments: any = {};
-        try {
-          toolArguments = JSON.parse((call as any).function.arguments);
-        } catch (_) {
-          toolArguments = { raw: (call as any).function.arguments };
-        }
-
-        reasoningSteps.push({
-          id: toolCallId,
-          timestamp: Date.now(),
-          type: 'tool_call',
-          title: `Executing tool: ${functionName}`,
-          details: `Parameters:\n${JSON.stringify(toolArguments, null, 2)}`,
-          toolName: functionName
-        });
-
-        try {
-          // Execute!
-          const output = await runTool(functionName, toolArguments);
-
-          reasoningSteps.push({
-            id: generateId(),
-            timestamp: Date.now(),
-            type: 'tool_response',
-            title: `Tool output: ${functionName}`,
-            details: JSON.stringify(output, null, 2),
-            toolName: functionName,
-            elapsedMs: Date.now() - callStart
-          });
-
-          // Standard OpenAI response format
-          messages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content: JSON.stringify(output)
-          });
-
-        } catch (toolError: any) {
-          reasoningSteps.push({
-            id: generateId(),
-            timestamp: Date.now(),
-            type: 'error',
-            title: `Tool failure: ${functionName}`,
-            details: toolError.message || String(toolError),
-            toolName: functionName,
-            elapsedMs: Date.now() - callStart
-          });
-
-          messages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content: JSON.stringify({ error: toolError.message || String(toolError), failed: true })
-          });
-        }
-      }
     } else {
-      // Done! The OpenAI model did not invoke any more tool calls, and produced a final textual answer.
-      finalAnswer = modelThoughts;
-      break;
+      finalAnswer = 'The Strands agent finished, but no final text response was produced.';
     }
   }
 
-  // Safety fallback
-  if (!finalAnswer) {
-    const lastMsg = messages[messages.length - 1];
-    finalAnswer = lastMsg?.content || 'Agent has finished but no response was produced.';
-    
-    reasoningSteps.push({
-      id: generateId(),
-      timestamp: Date.now(),
-      type: 'thought',
-      title: 'Safety Intercept',
-      details: 'Safety maximum loops reached. Finalizing current execution frame state.'
-    });
-  }
-
-  const totalDuration = Date.now() - startTimer;
   reasoningSteps.push({
     id: generateId(),
     timestamp: Date.now(),
     type: 'thought',
-    title: 'Resolution Finalised',
-    details: `Successfully evaluated OpenAI agent prompt response. Total period: ${totalDuration}ms.`
+    title: 'Resolution finalised',
+    details: `Strands agent completed with stop reason "${result.stopReason}". Total duration: ${Date.now() - startTimer}ms.`,
   });
 
   return {
     answer: finalAnswer,
-    reasoningSteps
+    reasoningSteps,
   };
+}
+
+/**
+ * Runs the multi-step Strands Agents SDK loop for a chat request.
+ */
+export async function runAgentLoop(
+  message: string,
+  history: ChatMessage[],
+  enabledTools: ToolType[],
+  openAIConfig?: OpenAIConfig
+): Promise<{ answer: string; reasoningSteps: ReasoningStep[] }> {
+  resolveApiKey(openAIConfig);
+  return runStrandsAgent(message, history, enabledTools, openAIConfig);
 }
