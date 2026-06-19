@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
   import { browser } from '$app/environment';
+  import { tick } from 'svelte';
   import { slide } from 'svelte/transition';
-  import type { ChatSession, Message, ToolType, ToolDefinition, ReasoningStep } from '$lib/types';
+  import type { ChatSession, Message, ToolType, ToolDefinition } from '$lib/types';
   import ReasoningView from '$lib/components/ReasoningView.svelte';
 
   import Bot from 'lucide-svelte/icons/bot';
@@ -11,19 +11,12 @@
   import Sparkles from 'lucide-svelte/icons/sparkles';
   import Calculator from 'lucide-svelte/icons/calculator';
   import CloudSun from 'lucide-svelte/icons/cloud-sun';
-  import Settings from 'lucide-svelte/icons/settings';
   import Check from 'lucide-svelte/icons/check';
   import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
   import HelpCircle from 'lucide-svelte/icons/help-circle';
   import AlertCircle from 'lucide-svelte/icons/alert-circle';
   import Loader from 'lucide-svelte/icons/loader';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
-  import Sliders from 'lucide-svelte/icons/sliders';
-  import Eye from 'lucide-svelte/icons/eye';
-  import EyeOff from 'lucide-svelte/icons/eye-off';
-  import ShieldCheck from 'lucide-svelte/icons/shield-check';
-  import ShieldAlert from 'lucide-svelte/icons/shield-alert';
-  import Trash2 from 'lucide-svelte/icons/trash-2';
 
   const AVAILABLE_TOOLS: ToolDefinition[] = [
     {
@@ -35,41 +28,29 @@
     },
     {
       id: 'weather',
-      name: 'Live Weather',
-      description: 'Obtains coordinates and live temperature conditions for any global city.',
+      name: 'June City Weather',
+      description: 'Returns hardcoded average June temperatures for 10 major world cities.',
       icon: 'weather',
-      parameterDescription: 'City: format e.g. "Tokyo" or "Paris, FR"'
+      parameterDescription: 'City: Paris, London, New York, Berlin, Tokyo, Sydney, Dubai, Singapore, Los Angeles, or Moscow'
     }
   ];
 
   const SUGGESTED_PROMPTS = [
     {
-      text: "What is the temperature in Sydney multiplied by 3.5?",
+      text: "What is the June temperature in Sydney multiplied by 3.5?",
       tools: ['calculator', 'weather'] as ToolType[],
       label: "Weather ➔ Math combination"
     },
     {
-      text: "Compare temperatures of Paris and Berlin. What is the difference?",
+      text: "Compare June temperatures of Paris and Berlin. What is the difference?",
       tools: ['calculator', 'weather'] as ToolType[],
       label: "Multi-city Comparison"
     },
     {
       text: "Calculate result of: (450 * 12) / (5.5 * 3^2)",
       tools: ['calculator'] as ToolType[],
-      label: "Pure Pure Calculator"
+      label: "Pure Calculator"
     }
-  ];
-
-  const PRESET_MODELS = [
-    { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (OpenAI)' },
-    { id: 'openai/gpt-4o', label: 'GPT-4o (OpenAI)' },
-    { id: 'openai/o1-mini', label: 'o1-mini (OpenAI)' },
-    { id: 'openai/o3-mini', label: 'o3-mini (OpenAI)' },
-    { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
-    { id: 'deepseek/deepseek-reasoner', label: 'DeepSeek R1' },
   ];
 
   const getInitialSessions = (): ChatSession[] => {
@@ -97,7 +78,7 @@
           {
             id: 'welcome',
             role: 'model',
-            content: "Hello! I am Strands Agent Demo by Dave Xia. I can run sequential, multi-step actions using the tools enabled on the left panel.\n\nType in questions requiring live data or computations, and you will be able to trace my thoughts and calculations in real-time!",
+            content: "Hello! I am Strands Agent Demo by Dave Xia. I can run sequential, multi-step actions using the tools enabled on the left panel.\n\nAsk about June temperatures in major cities or math computations, and you can trace my reasoning in real time. API credentials are loaded from the server .env file.",
             timestamp: Date.now()
           }
         ]
@@ -113,56 +94,12 @@
   let isLoading = $state<boolean>(false);
   let errorBanner = $state<string | null>(null);
 
-  // OpenRouter keys and configs
-  let openAIApiKey = $state<string>('');
-  let showApiKeyText = $state<boolean>(false);
-  let openAIBaseURL = $state<string>('https://openrouter.ai/api/v1');
-  let openAIModel = $state<string>('openai/gpt-4o-mini');
-  
-  // Real-time server connectivity health checker
-  let hasServerEnvKey = $state<boolean>(false);
-
   let chatScrollContainer = $state<HTMLDivElement | null>(null);
-
-  onMount(() => {
-    // Read from localStorage safely in browser
-    if (browser) {
-      openAIApiKey = localStorage.getItem('strands_openai_key') || '';
-      openAIBaseURL = localStorage.getItem('strands_openai_base_url') || 'https://openrouter.ai/api/v1';
-      openAIModel = localStorage.getItem('strands_openai_model') || 'openai/gpt-4o-mini';
-      
-      const sessionList = getInitialSessions();
-      sessions = sessionList;
-      activeSessionId = sessionList[0].id;
-      enabledTools = sessionList[0].enabledTools || ['calculator', 'weather'];
-    }
-
-    testHealth();
-  });
 
   // Sync session changes back to localStorage
   $effect(() => {
     if (browser && sessions.length > 0) {
       localStorage.setItem('strands_agent_sessions', JSON.stringify(sessions));
-    }
-  });
-
-  // Sync OpenAI client parameter selections
-  $effect(() => {
-    if (browser) {
-      localStorage.setItem('strands_openai_key', openAIApiKey);
-    }
-  });
-
-  $effect(() => {
-    if (browser) {
-      localStorage.setItem('strands_openai_base_url', openAIBaseURL);
-    }
-  });
-
-  $effect(() => {
-    if (browser) {
-      localStorage.setItem('strands_openai_model', openAIModel);
     }
   });
 
@@ -183,19 +120,6 @@
       });
     }
   });
-
-  // Check server connection status
-  const testHealth = async () => {
-    try {
-      const response = await fetch('/api/health');
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}));
-        hasServerEnvKey = !!data.hasEnvKey;
-      }
-    } catch {
-      // Health check failed; sidebar will prompt for a client-side API key.
-    }
-  };
 
   const toggleTool = (toolId: ToolType) => {
     const updated = enabledTools.includes(toolId)
@@ -260,13 +184,8 @@
         },
         body: JSON.stringify({
           message: messageToSend,
-          history: updatedHistory.slice(0, -1), // Everything except the newly injected message
+          history: updatedHistory.slice(0, -1),
           enabledTools: enabledTools,
-          openAIConfig: {
-            apiKey: openAIApiKey.trim() || undefined,
-            baseURL: openAIBaseURL.trim() || undefined,
-            model: openAIModel.trim() || undefined
-          }
         })
       });
 
@@ -507,138 +426,6 @@
           </div>
         </div>
 
-        <!-- OpenRouter & OpenAI Configuration preferences -->
-        <div class="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-3.5">
-          <div class="flex items-center gap-2 px-1 border-b border-transparent">
-            <Sliders class="w-3.5 h-3.5 text-blue-655 dark:text-blue-400" />
-            <h3 class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-              OpenRouter Settings
-            </h3>
-          </div>
-
-          <div class="space-y-2.5 px-1">
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <label for="api-key-input" class="block text-[10px] font-semibold text-slate-505 dark:text-slate-400">
-                  API Key (OpenRouter or OpenAI)
-                </label>
-                {#if openAIApiKey}
-                  <button
-                    type="button"
-                    onclick={() => {
-                      openAIApiKey = '';
-                      if (browser) {
-                        localStorage.removeItem('strands_openai_key');
-                      }
-                    }}
-                    class="text-[9px] text-red-500 hover:text-red-600 dark:text-red-400 flex items-center gap-0.5 outline-none font-medium cursor-pointer"
-                    title="Clear API Key from Browser LocalStorage"
-                  >
-                    <Trash2 class="w-2.5 h-2.5" />
-                    <span>Clear Saved Key</span>
-                  </button>
-                {/if}
-              </div>
-              <div class="relative">
-                <input
-                  id="api-key-input"
-                  type={showApiKeyText ? "text" : "password"}
-                  bind:value={openAIApiKey}
-                  placeholder={hasServerEnvKey ? "✔ Using server environment key" : "sk-or-... (Falls back to env settings)"}
-                  class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-2 pr-8 focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-mono text-slate-800 dark:text-slate-200"
-                />
-                <button
-                  type="button"
-                  onclick={() => showApiKeyText = !showApiKeyText}
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 outline-none cursor-pointer"
-                >
-                  {#if showApiKeyText}
-                    <EyeOff class="w-3.5 h-3.5" />
-                  {:else}
-                    <Eye class="w-3.5 h-3.5" />
-                  {/if}
-                </button>
-              </div>
-              
-              <!-- Dynamic security and Git Leak prevention indicator -->
-              <div class="mt-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800/80 text-[10px] leading-relaxed space-y-1.5">
-                {#if hasServerEnvKey}
-                  <div class="flex items-start gap-1.5 text-emerald-600 dark:text-emerald-400 animate-fade-in">
-                    <ShieldCheck class="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <div>
-                      <span class="font-semibold">Secure Key Detected:</span> A server-side environment key is currently active. You can safely leave this input completely blank.
-                    </div>
-                  </div>
-                {:else}
-                  <div class="flex items-start gap-1.5 text-amber-600 dark:text-amber-400">
-                    <ShieldAlert class="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <div>
-                      <span class="font-semibold">No Host Key Detected:</span> Defaulting to client key provided above or system default sandbox.
-                    </div>
-                  </div>
-                {/if}
-                <div class="text-slate-500 dark:text-slate-400 border-t border-slate-150/40 dark:border-slate-800/40 pt-1.5 text-[9px]">
-                  🔒 <span class="font-semibold text-slate-600 dark:text-slate-350">GitHub Leak Protection:</span> Your server-side settings reside in <code>.env</code> which is fully ignored in <code>.gitignore</code> (rules for <code>.env*</code> are pre-configured). Storing credentials on your host backend prevents secrets from ever reaching your GitHub commits.
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label for="base-url-input" class="block text-[10px] font-semibold text-slate-505 dark:text-slate-400 mb-1">
-                Base URL (Endpoint)
-              </label>
-              <input
-                id="base-url-input"
-                type="text"
-                bind:value={openAIBaseURL}
-                placeholder="https://openrouter.ai/api/v1"
-                class="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-2 focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-mono"
-              />
-            </div>
-
-            <div>
-              <label for="model-preset-select" class="block text-[10px] font-semibold text-slate-505 dark:text-slate-400 mb-1">
-                Language Model Preset
-              </label>
-              <select
-                id="model-preset-select"
-                value={PRESET_MODELS.some(p => p.id === openAIModel) ? openAIModel : 'custom'}
-                onchange={(e) => {
-                  const val = (e.target as HTMLSelectElement).value;
-                  if (val === 'custom') {
-                    openAIModel = 'openai/gpt-4-turbo';
-                  } else {
-                    openAIModel = val;
-                  }
-                }}
-                class="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-2 focus:outline-hidden focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-200 cursor-pointer"
-              >
-                {#each PRESET_MODELS as preset}
-                  <option value={preset.id} class="bg-white dark:bg-slate-900">
-                    {preset.label}
-                  </option>
-                {/each}
-                <option value="custom" class="bg-white dark:bg-slate-900">Custom Model ID...</option>
-              </select>
-            </div>
-
-            {#if !PRESET_MODELS.some(p => p.id === openAIModel)}
-              <div transition:slide={{ duration: 150 }}>
-                <label for="custom-model-input" class="block text-[10px] font-semibold text-slate-505 dark:text-slate-400 mb-1">
-                  Custom Model Identifier
-                </label>
-                <input
-                  id="custom-model-input"
-                  type="text"
-                  bind:value={openAIModel}
-                  placeholder="e.g. openai/gpt-4o"
-                  class="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-2 focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-mono text-slate-850 dark:text-slate-200"
-                />
-              </div>
-            {/if}
-          </div>
-        </div>
-
       </div>
     </aside>
 
@@ -785,7 +572,7 @@
                 }
               }}
               disabled={isLoading}
-              placeholder="Send instructions... (e.g., &ldquo;What is {new Date().getFullYear() - 1999} * 57.5?&rdquo; or weather queries)"
+              placeholder="Send instructions... (e.g., &ldquo;Compare June temperatures in Paris and Berlin&rdquo; or math queries)"
               rows={2}
               class="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 p-3 pr-10 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-hidden focus:ring-1 focus:ring-blue-600 focus:border-blue-600 disabled:opacity-60 resize-none font-sans custom-scrollbar"
             ></textarea>

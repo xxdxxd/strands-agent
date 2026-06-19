@@ -5,14 +5,13 @@ import type { ChatRequest } from '$lib/types';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { message, history, enabledTools, openAIConfig } = await request.json() as ChatRequest;
+    const { message, history, enabledTools } = await request.json() as ChatRequest;
 
     if (!message || message.trim() === '') {
       return json({ error: 'Message content cannot be blank' }, { status: 400 });
     }
 
-    // Run the Strands Agents SDK loop
-    const result = await runAgentLoop(message, history || [], enabledTools || [], openAIConfig);
+    const result = await runAgentLoop(message, history || [], enabledTools || []);
     
     return json(result);
   } catch (err: any) {

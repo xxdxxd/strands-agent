@@ -11,8 +11,14 @@ import {
   type ToolResultBlock,
 } from '@strands-agents/sdk';
 import { OpenAIModel } from '@strands-agents/sdk/models/openai';
-import type { Message as ChatMessage, ReasoningStep, ToolType, OpenAIConfig } from '$lib/types';
+import type { Message as ChatMessage, ReasoningStep, ToolType } from '$lib/types';
 import { buildStrandsTools } from './strands-tools';
+import {
+  getAppUrl,
+  getOpenAIApiKey,
+  getOpenAIBaseURL,
+  getOpenAIModel,
+} from './openai-config';
 
 const SYSTEM_PROMPT =
   'You are a highly analytical, autonomous AI specialist powered by the AWS Strands Agents SDK. ' +
@@ -25,24 +31,14 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-function resolveApiKey(config?: OpenAIConfig): string {
-  const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey === 'MY_OPENAI_API_KEY' || apiKey === 'your_actual_api_key' || apiKey.trim() === '') {
-    throw new Error(
-      'No valid OPENAI_API_KEY was provided. Please configure your API key in the settings panel or in the server environment.'
-    );
-  }
-  return apiKey;
-}
-
-function createStrandsModel(config?: OpenAIConfig): OpenAIModel {
-  const apiKey = resolveApiKey(config);
-  const baseURL = config?.baseURL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
-  const modelId = config?.model || 'openai/gpt-4o-mini';
+function createStrandsModel(): OpenAIModel {
+  const apiKey = getOpenAIApiKey();
+  const baseURL = getOpenAIBaseURL();
+  const modelId = getOpenAIModel();
 
   const defaultHeaders: Record<string, string> = {};
   if (baseURL.includes('openrouter.ai')) {
-    defaultHeaders['HTTP-Referer'] = process.env.APP_URL || 'https://github.com/xxdxxd/strands-agent';
+    defaultHeaders['HTTP-Referer'] = getAppUrl();
     defaultHeaders['X-Title'] = 'Strands Agent Demo by Dave Xia';
   }
 
@@ -189,13 +185,12 @@ function mapStreamEvent(event: AgentStreamEvent, steps: ReasoningStep[], ctx: St
 async function runStrandsAgent(
   message: string,
   history: ChatMessage[],
-  enabledTools: ToolType[],
-  openAIConfig?: OpenAIConfig
+  enabledTools: ToolType[]
 ): Promise<{ answer: string; reasoningSteps: ReasoningStep[] }> {
   const reasoningSteps: ReasoningStep[] = [];
   const startTimer = Date.now();
-  const activeModel = openAIConfig?.model || 'openai/gpt-4o-mini';
-  const baseURL = openAIConfig?.baseURL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+  const activeModel = getOpenAIModel();
+  const baseURL = getOpenAIBaseURL();
 
   reasoningSteps.push({
     id: generateId(),
@@ -206,7 +201,7 @@ async function runStrandsAgent(
   });
 
   const agent = new Agent({
-    model: createStrandsModel(openAIConfig),
+    model: createStrandsModel(),
     tools: buildStrandsTools(enabledTools),
     systemPrompt: SYSTEM_PROMPT,
     messages: toStrandsHistory(history),
@@ -273,9 +268,8 @@ async function runStrandsAgent(
 export async function runAgentLoop(
   message: string,
   history: ChatMessage[],
-  enabledTools: ToolType[],
-  openAIConfig?: OpenAIConfig
+  enabledTools: ToolType[]
 ): Promise<{ answer: string; reasoningSteps: ReasoningStep[] }> {
-  resolveApiKey(openAIConfig);
-  return runStrandsAgent(message, history, enabledTools, openAIConfig);
+  getOpenAIApiKey();
+  return runStrandsAgent(message, history, enabledTools);
 }

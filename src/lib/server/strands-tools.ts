@@ -5,7 +5,7 @@
 import { tool } from '@strands-agents/sdk';
 import { z } from 'zod';
 import type { ToolType } from '$lib/types';
-import { evaluateMath, fetchWeather } from './tools';
+import { evaluateMath, getJuneCityTemperature } from './tools';
 
 export const calculatorTool = tool({
   name: 'calculator',
@@ -22,11 +22,13 @@ export const calculatorTool = tool({
 export const weatherTool = tool({
   name: 'weather',
   description:
-    'Retrieves coordinate locations and current Fahrenheit/Celsius temperatures for any worldwide city.',
+    'Returns hardcoded average June temperatures (°C) for major cities: Paris, London, New York, Berlin, Tokyo, Sydney, Dubai, Singapore, Los Angeles, and Moscow.',
   inputSchema: z.object({
-    city: z.string().describe('Name of the city, e.g. "Seattle" or "Berlin"'),
+    city: z
+      .string()
+      .describe('Name of a supported city, e.g. "Paris", "London", or "New York"'),
   }),
-  callback: async (input) => fetchWeather(input.city),
+  callback: (input) => getJuneCityTemperature(input.city),
 });
 
 export function buildStrandsTools(enabledTools: ToolType[]) {

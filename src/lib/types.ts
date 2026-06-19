@@ -38,17 +38,10 @@ export interface ReasoningStep {
   elapsedMs?: number;
 }
 
-export interface OpenAIConfig {
-  apiKey?: string;
-  baseURL?: string;
-  model?: string;
-}
-
 export interface ChatRequest {
   message: string;
   history: Message[];
   enabledTools: ToolType[];
-  openAIConfig?: OpenAIConfig;
 }
 
 export interface ChatResponse {

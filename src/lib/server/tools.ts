@@ -2,8 +2,6 @@
  * Server-Side Tools Implementation for Strands Agent (SvelteKit server-only)
  */
 
-import type { ReasoningStep } from '$lib/types';
-
 /**
  * 1. Safe Mathematical Expression Parser
  * Evaluates standard arithmetic expressions avoiding unsafe `eval` or `Function` constructors.
@@ -130,8 +128,11 @@ export function evaluateMath(expression: string): { result: number; step: string
 }
 
 /**
- * 2. Weather Service via Open-Meteo API
+ * 2. Weather Service — hardcoded June temperatures for major world cities.
+ *
+ * Live Open-Meteo lookup (commented out):
  */
+/*
 export async function fetchWeather(city: string): Promise<{
   city: string;
   country: string;
@@ -145,7 +146,6 @@ export async function fetchWeather(city: string): Promise<{
     throw new Error('City name cannot be empty');
   }
 
-  // Phase 1: Geocoding to translate name to coordinates
   const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
   const geoResponse = await fetch(geoUrl, {
     headers: { 'User-Agent': 'aistudio-build' },
@@ -163,7 +163,6 @@ export async function fetchWeather(city: string): Promise<{
   const location = geoData.results[0];
   const { latitude, longitude, name, country } = location;
 
-  // Phase 2: Fetch current weather forecasting
   const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
   const weatherResponse = await fetch(weatherUrl, {
     headers: { 'User-Agent': 'aistudio-build' },
@@ -180,7 +179,6 @@ export async function fetchWeather(city: string): Promise<{
     throw new Error(`Weather information not available for "${name}"`);
   }
 
-  // Map WMO code to human-readable condition
   const weatherCode = current.weathercode;
   const condition = mapWmoCode(weatherCode);
 
@@ -206,5 +204,71 @@ function mapWmoCode(code: number): string {
   if ([85, 86].includes(code)) return 'Snow showers: slight or heavy';
   if (code >= 95) return 'Thunderstorm: slight or moderate';
   return 'Cloudy';
+}
+*/
+
+/** Hardcoded average June temperatures (°C) for 10 major cities. */
+const JUNE_CITY_TEMPERATURES: Record<string, { city: string; country: string; temperatureCelsius: number }> = {
+  paris: { city: 'Paris', country: 'France', temperatureCelsius: 20 },
+  london: { city: 'London', country: 'United Kingdom', temperatureCelsius: 19 },
+  'new york': { city: 'New York', country: 'United States', temperatureCelsius: 24 },
+  nyc: { city: 'New York', country: 'United States', temperatureCelsius: 24 },
+  berlin: { city: 'Berlin', country: 'Germany', temperatureCelsius: 21 },
+  tokyo: { city: 'Tokyo', country: 'Japan', temperatureCelsius: 23 },
+  sydney: { city: 'Sydney', country: 'Australia', temperatureCelsius: 16 },
+  dubai: { city: 'Dubai', country: 'United Arab Emirates', temperatureCelsius: 38 },
+  singapore: { city: 'Singapore', country: 'Singapore', temperatureCelsius: 29 },
+  'los angeles': { city: 'Los Angeles', country: 'United States', temperatureCelsius: 22 },
+  moscow: { city: 'Moscow', country: 'Russia', temperatureCelsius: 18 },
+};
+
+const SUPPORTED_CITY_NAMES = [...new Set(Object.values(JUNE_CITY_TEMPERATURES).map((entry) => entry.city))];
+
+function normalizeCityKey(city: string): string {
+  return city.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function getJuneCityTemperature(city: string): {
+  city: string;
+  country: string;
+  month: 'June';
+  temperatureCelsius: number;
+  supportedCities: string[];
+} {
+  if (!city || city.trim().length === 0) {
+    throw new Error('City name cannot be empty');
+  }
+
+  const entry = JUNE_CITY_TEMPERATURES[normalizeCityKey(city)];
+  if (!entry) {
+    throw new Error(
+      `City "${city}" is not supported. Available cities: ${SUPPORTED_CITY_NAMES.join(', ')}.`
+    );
+  }
+
+  return {
+    city: entry.city,
+    country: entry.country,
+    month: 'June',
+    temperatureCelsius: entry.temperatureCelsius,
+    supportedCities: SUPPORTED_CITY_NAMES,
+  };
+}
+
+export function listJuneCityTemperatures(): Array<{
+  city: string;
+  country: string;
+  month: 'June';
+  temperatureCelsius: number;
+}> {
+  return SUPPORTED_CITY_NAMES.map((cityName) => {
+    const entry = JUNE_CITY_TEMPERATURES[normalizeCityKey(cityName)];
+    return {
+      city: entry.city,
+      country: entry.country,
+      month: 'June' as const,
+      temperatureCelsius: entry.temperatureCelsius,
+    };
+  });
 }
 
